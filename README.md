@@ -1,5 +1,11 @@
 # Claude Code Rust
 
+![status](https://img.shields.io/badge/status-designing-blue)
+![language](https://img.shields.io/badge/language-Rust-E57324?logo=rust&logoColor=white)
+![origin](https://img.shields.io/badge/origin-Claude_Code_TS-8A2BE2)
+![focus](https://img.shields.io/badge/focus-Agent_Runtime-0F172A)
+![license](https://img.shields.io/badge/license-MIT-green)
+
 把 Claude Code 里的核心运行时思路拆出来，用 Rust 重新组织成一组可复用的 crate。
 
 这个项目关心的不是“把 TypeScript 一行一行翻过去”，而是把 agent 真正依赖的那部分能力整理清楚：消息循环、工具调用、权限控制、长任务、上下文压缩、模型接入，以及 MCP 扩展。
@@ -140,12 +146,6 @@ rust-clw/
 
 等各个 crate 真正落地之后，这里会继续展开成一个 Rust workspace。
 
-## 不在当前范围里的事情
-
-- 不做 Claude Code 的 1:1 Rust 翻译
-- 不追求 React/Ink 终端 UI 的完整复刻
-- 不把实现绑定死在某一个模型提供方上
-- 不覆盖原项目里的内部 feature 或私有逻辑
 
 ## 参考
 
