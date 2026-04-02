@@ -75,17 +75,37 @@ impl Tool for BashTool {
 
         let shell = platform_shell();
 
+        let command_to_run = if cfg!(windows) && shell.program.eq_ignore_ascii_case("powershell") {
+            format!(
+                concat!(
+                    "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false); ",
+                    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ",
+                    "$OutputEncoding = [System.Text.UTF8Encoding]::new($false); ",
+                    "[System.Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ",
+                    "{}"
+                ),
+                command
+            )
+        } else {
+            command.to_string()
+        };
+
         info!(command, shell = shell.program, "executing shell command");
 
         let result = tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), {
             let mut child = Command::new(shell.program);
             child
                 .args(shell.args)
-                .arg(command)
+                .arg(&command_to_run)
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .current_dir(&ctx.cwd);
+
+            if cfg!(windows) {
+                child.env("PYTHONUTF8", "1");
+            }
+
             child.output()
         })
         .await;
