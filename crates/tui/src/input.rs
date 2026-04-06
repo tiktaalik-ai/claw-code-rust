@@ -93,6 +93,12 @@ impl InputBuffer {
         value
     }
 
+    /// Replaces the full composer text and moves the cursor to the end.
+    pub(crate) fn replace(&mut self, value: impl Into<String>) {
+        self.text = value.into();
+        self.cursor_chars = self.char_len();
+    }
+
     /// Returns the rendered cursor position for a wrapped text area.
     pub(crate) fn visual_cursor(&self, inner_width: u16) -> (u16, u16) {
         if inner_width == 0 {

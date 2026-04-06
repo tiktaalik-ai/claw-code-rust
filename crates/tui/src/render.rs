@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Modifier, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Paragraph, Wrap},
     Frame,
 };
 
@@ -12,7 +12,7 @@ use crate::{app::TuiApp, events::TranscriptItemKind};
 pub(crate) fn draw(frame: &mut Frame, app: &TuiApp) {
     let composer_height = composer_height(app, frame.area());
     let [header_area, transcript_area, composer_area, footer_area] = Layout::vertical([
-        Constraint::Length(3),
+        Constraint::Length(6),
         Constraint::Min(6),
         Constraint::Length(composer_height),
         Constraint::Length(1),
@@ -47,15 +47,29 @@ fn render_header(app: &TuiApp) -> Paragraph<'static> {
         .unwrap_or_else(|| app.cwd.to_string_lossy().into_owned());
 
     Paragraph::new(Text::from(vec![
+        Line::from(vec![Span::styled(
+            "   ________               _______ ",
+            Style::new().cyan().add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  / ____/ /___ __      __/ ____/ |",
+            Style::new().cyan().add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            " / /   / / __ `/ | /| / / /   | |",
+            Style::new().cyan().add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "/ /___/ / /_/ /| |/ |/ / /___ | |",
+            Style::new().cyan().add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "\\____/_/\\__,_/ |__/|__/\\____/ |_|",
+            Style::new().cyan().add_modifier(Modifier::BOLD),
+        )]),
         Line::from(vec![
-            Span::styled(
-                " ClawCR ",
-                Style::new().black().on_cyan().add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
             Span::styled(format!("{spinner} {}", app.status_message), status_style),
-        ]),
-        Line::from(vec![
+            Span::raw("   "),
             Span::styled("model ", Style::new().dark_gray()),
             Span::styled(
                 app.model.clone(),
@@ -66,14 +80,12 @@ fn render_header(app: &TuiApp) -> Paragraph<'static> {
             Span::raw(cwd_name),
         ]),
     ]))
-    .block(Block::default().borders(Borders::BOTTOM))
 }
 
 fn render_transcript(app: &TuiApp, area: Rect) -> Paragraph<'static> {
-    let width = area.width.saturating_sub(2).max(1);
+    let width = area.width.max(1);
     let content = transcript_text(app);
-    let max_scroll =
-        transcript_line_count(app, width).saturating_sub(area.height.saturating_sub(2));
+    let max_scroll = transcript_line_count(app, width).saturating_sub(area.height);
     let scroll = if app.follow_output {
         max_scroll
     } else {
@@ -81,32 +93,54 @@ fn render_transcript(app: &TuiApp, area: Rect) -> Paragraph<'static> {
     };
 
     Paragraph::new(content)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Conversation "),
-        )
         .wrap(Wrap { trim: false })
         .scroll((scroll, 0))
 }
 
 fn render_composer(app: &TuiApp) -> Paragraph<'_> {
-    let title = if app.busy {
-        " Composer (model is busy) "
-    } else {
-        " Composer "
-    };
-    let body = if app.input.text().is_empty() {
-        Text::from(vec![Line::from(vec![Span::styled(
-            "Type a message. Enter sends, Shift+Enter inserts a newline.",
-            Style::new().dark_gray(),
-        )])])
-    } else {
-        Text::from(app.input.text().to_string())
-    };
+    let mut input_lines = app.input.text().lines();
+    let first_line = input_lines.next().unwrap_or_default().to_string();
+    let mut lines = vec![Line::from(vec![
+        Span::styled("> ", Style::new().cyan().add_modifier(Modifier::BOLD)),
+        if first_line.is_empty() {
+            Span::styled(
+                "Type a message or / for commands",
+                Style::new().dark_gray(),
+            )
+        } else {
+            Span::raw(first_line)
+        },
+    ])];
+    for line in input_lines {
+        lines.push(Line::from(format!("  {line}")));
+    }
+    let suggestions = app.slash_suggestions();
+    if !suggestions.is_empty() {
+        lines.push(Line::from(""));
+        for (index, suggestion) in suggestions.iter().enumerate() {
+            let selected = index == app.slash_selection.min(suggestions.len() - 1);
+            let bullet_style = if selected {
+                Style::new().black().on_gray().add_modifier(Modifier::BOLD)
+            } else {
+                Style::new().dark_gray()
+            };
+            let text_style = if selected {
+                Style::new().black().on_gray()
+            } else {
+                Style::new().dark_gray()
+            };
+            lines.push(Line::from(vec![
+                Span::styled("  ", text_style),
+                Span::styled(if selected { ">" } else { "•" }, bullet_style),
+                Span::styled(
+                    format!(" {}  {}", suggestion.name, suggestion.description),
+                    text_style,
+                ),
+            ]));
+        }
+    }
 
-    Paragraph::new(body)
-        .block(Block::default().borders(Borders::ALL).title(title))
+    Paragraph::new(Text::from(lines))
         .wrap(Wrap { trim: false })
 }
 
@@ -158,12 +192,22 @@ fn append_transcript_item(lines: &mut Vec<Line<'static>>, item: &crate::events::
     match item.kind {
         TranscriptItemKind::User => {
             lines.push(Line::from(vec![
-                Span::styled("› ", Style::new().fg(item.kind.accent()).add_modifier(Modifier::BOLD)),
+                Span::styled("> ", Style::new().fg(item.kind.accent()).add_modifier(Modifier::BOLD)),
                 Span::raw(item.body.clone()),
             ]));
         }
-        TranscriptItemKind::Assistant
-        | TranscriptItemKind::ToolCall
+        TranscriptItemKind::Assistant => {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "• ",
+                    Style::new()
+                        .fg(item.kind.accent())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(item.body.clone(), Style::new().fg(item.kind.accent())),
+            ]));
+        }
+        TranscriptItemKind::ToolCall
         | TranscriptItemKind::ToolResult
         | TranscriptItemKind::System
         | TranscriptItemKind::Error => {
@@ -174,12 +218,7 @@ fn append_transcript_item(lines: &mut Vec<Line<'static>>, item: &crate::events::
                         .fg(item.kind.accent())
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    item.title.clone(),
-                    Style::new()
-                        .fg(item.kind.accent())
-                        .add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(item.title.clone(), title_style(item.kind)),
             ]));
             append_transcript_body(lines, item);
         }
@@ -209,8 +248,19 @@ fn append_transcript_body(lines: &mut Vec<Line<'static>>, item: &crate::events::
 fn styled_body_line(text: String, kind: TranscriptItemKind) -> Vec<Span<'static>> {
     match kind {
         TranscriptItemKind::Error => vec![Span::styled(text, Style::new().fg(kind.accent()))],
-        TranscriptItemKind::ToolCall => vec![Span::styled(text, Style::new().dark_gray())],
+        TranscriptItemKind::ToolCall | TranscriptItemKind::ToolResult => {
+            vec![Span::styled(text, Style::new().dark_gray())]
+        }
         _ => vec![Span::raw(text)],
+    }
+}
+
+fn title_style(kind: TranscriptItemKind) -> Style {
+    match kind {
+        TranscriptItemKind::ToolCall | TranscriptItemKind::ToolResult => {
+            Style::new().dark_gray().add_modifier(Modifier::BOLD)
+        }
+        _ => Style::new().fg(kind.accent()).add_modifier(Modifier::BOLD),
     }
 }
 
@@ -230,15 +280,22 @@ fn wrapped_line_count(text: &str, inner_width: u16) -> u16 {
 
 fn composer_height(app: &TuiApp, area: Rect) -> u16 {
     let inner_width = area.width.saturating_sub(2).max(1);
-    let body_height = app.input.visual_line_count(inner_width).clamp(1, 6);
-    body_height + 2
+    let suggestion_height = app.slash_suggestions().len() as u16;
+    let suggestion_padding = if suggestion_height > 0 { 1 } else { 0 };
+    let body_height = app
+        .input
+        .visual_line_count(inner_width)
+        .saturating_add(suggestion_height)
+        .saturating_add(suggestion_padding)
+        .clamp(1, 8);
+    body_height
 }
 
 fn composer_cursor(app: &TuiApp, area: Rect) -> (u16, u16) {
     let inner_width = area.width.saturating_sub(2).max(1);
     let (cursor_x, cursor_y) = app.input.visual_cursor(inner_width);
     (
-        area.x + 1 + cursor_x.min(inner_width.saturating_sub(1)),
-        area.y + 1 + cursor_y.min(area.height.saturating_sub(3)),
+        area.x + 2 + cursor_x.min(inner_width.saturating_sub(1)),
+        area.y + cursor_y.min(area.height.saturating_sub(1)),
     )
 }

@@ -96,8 +96,8 @@ impl TranscriptItemKind {
         match self {
             TranscriptItemKind::User => Color::Cyan,
             TranscriptItemKind::Assistant => Color::Green,
-            TranscriptItemKind::ToolCall => Color::Yellow,
-            TranscriptItemKind::ToolResult => Color::Blue,
+            TranscriptItemKind::ToolCall => Color::DarkGray,
+            TranscriptItemKind::ToolResult => Color::DarkGray,
             TranscriptItemKind::Error => Color::Red,
             TranscriptItemKind::System => Color::Magenta,
         }

@@ -8,6 +8,7 @@ use crate::{
     events::{TranscriptItem, TranscriptItemKind, WorkerEvent},
     input::InputBuffer,
     render,
+    slash::{matching_slash_commands, SlashCommandSpec},
     terminal::ManagedTerminal,
     worker::{QueryWorkerConfig, QueryWorkerHandle},
     InteractiveTuiConfig,
@@ -50,6 +51,8 @@ pub(crate) struct TuiApp {
     pub(crate) total_input_tokens: usize,
     /// Total output tokens accumulated in the session.
     pub(crate) total_output_tokens: usize,
+    /// Currently selected slash-command suggestion row.
+    pub(crate) slash_selection: usize,
     /// Index of the assistant transcript item currently receiving streamed text.
     pending_assistant_index: Option<usize>,
     /// Background query worker owned by the UI.
@@ -81,6 +84,7 @@ impl TuiApp {
             turn_count: 0,
             total_input_tokens: 0,
             total_output_tokens: 0,
+            slash_selection: 0,
             pending_assistant_index: None,
             worker,
             should_quit: false,
@@ -148,6 +152,7 @@ impl TuiApp {
             }
             Event::Paste(text) => {
                 self.input.insert_str(&text);
+                self.reset_slash_selection();
             }
             Event::Resize(_, _) => {}
             _ => {}
@@ -176,6 +181,9 @@ impl TuiApp {
                 self.input.insert_char('\n');
             }
             KeyCode::Enter if !self.busy => {
+                if self.try_accept_slash_selection() {
+                    return;
+                }
                 let prompt = self.input.take();
                 if let Err(error) = self.handle_submission(prompt) {
                     self.push_item(
@@ -186,8 +194,15 @@ impl TuiApp {
                     self.status_message = "Failed to submit prompt".to_string();
                 }
             }
-            KeyCode::Backspace => self.input.backspace(),
-            KeyCode::Delete => self.input.delete(),
+            KeyCode::Backspace => {
+                self.input.backspace();
+                self.reset_slash_selection();
+            }
+            KeyCode::Delete => {
+                self.input.delete();
+                self.reset_slash_selection();
+            }
+            KeyCode::Tab if self.try_apply_slash_suggestion() => {}
             KeyCode::Left => self.input.move_left(),
             KeyCode::Right => self.input.move_right(),
             KeyCode::Home => self.input.move_home(),
@@ -196,12 +211,20 @@ impl TuiApp {
                 self.follow_output = true;
             }
             KeyCode::Up => {
-                self.follow_output = false;
-                self.scroll = self.scroll.saturating_sub(1);
+                if self.has_slash_suggestions() {
+                    self.move_slash_selection(-1);
+                } else {
+                    self.follow_output = false;
+                    self.scroll = self.scroll.saturating_sub(1);
+                }
             }
             KeyCode::Down => {
-                self.follow_output = false;
-                self.scroll = self.scroll.saturating_add(1);
+                if self.has_slash_suggestions() {
+                    self.move_slash_selection(1);
+                } else {
+                    self.follow_output = false;
+                    self.scroll = self.scroll.saturating_add(1);
+                }
             }
             KeyCode::PageUp => {
                 self.follow_output = false;
@@ -211,9 +234,13 @@ impl TuiApp {
                 self.follow_output = false;
                 self.scroll = self.scroll.saturating_add(10);
             }
-            KeyCode::Esc => self.input.clear(),
+            KeyCode::Esc => {
+                self.input.clear();
+                self.reset_slash_selection();
+            }
             KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.input.insert_char(ch);
+                self.reset_slash_selection();
             }
             _ => {}
         }
@@ -234,6 +261,7 @@ impl TuiApp {
         self.push_item(TranscriptItemKind::User, "You", prompt.clone());
         self.follow_output = true;
         self.busy = true;
+        self.reset_slash_selection();
         self.pending_assistant_index = None;
         self.status_message = "Waiting for model response".to_string();
         self.worker.submit_prompt(prompt)
@@ -318,6 +346,7 @@ impl TuiApp {
                 self.status_message = "Streaming response".to_string();
             }
             WorkerEvent::ToolCall { summary, detail } => {
+                self.pending_assistant_index = None;
                 self.push_item(
                     TranscriptItemKind::ToolCall,
                     summary.clone(),
@@ -408,6 +437,52 @@ impl TuiApp {
             self.scroll = 0;
         }
     }
+
+    pub(crate) fn slash_suggestions(&self) -> Vec<SlashCommandSpec> {
+        matching_slash_commands(self.input.text())
+    }
+
+    fn has_slash_suggestions(&self) -> bool {
+        !self.slash_suggestions().is_empty()
+    }
+
+    fn reset_slash_selection(&mut self) {
+        self.slash_selection = 0;
+    }
+
+    fn move_slash_selection(&mut self, delta: isize) {
+        let suggestions = self.slash_suggestions();
+        if suggestions.is_empty() {
+            self.slash_selection = 0;
+            return;
+        }
+        let len = suggestions.len() as isize;
+        let next = (self.slash_selection as isize + delta).clamp(0, len - 1);
+        self.slash_selection = next as usize;
+    }
+
+    fn try_apply_slash_suggestion(&mut self) -> bool {
+        let suggestions = self.slash_suggestions();
+        if suggestions.is_empty() {
+            return false;
+        }
+        let selected = suggestions[self.slash_selection.min(suggestions.len() - 1)];
+        self.input.replace(selected.name);
+        self.reset_slash_selection();
+        true
+    }
+
+    fn try_accept_slash_selection(&mut self) -> bool {
+        let trimmed = self.input.text().trim();
+        if trimmed.starts_with('/') && !trimmed.contains(char::is_whitespace) {
+            let suggestions = self.slash_suggestions();
+            if suggestions.len() == 1 && suggestions[0].name != trimmed {
+                self.input.replace(suggestions[0].name);
+                return true;
+            }
+        }
+        false
+    }
 }
 
 #[cfg(test)]
@@ -437,6 +512,7 @@ mod tests {
             turn_count: 3,
             total_input_tokens: 10,
             total_output_tokens: 20,
+            slash_selection: 0,
             pending_assistant_index: None,
             worker: QueryWorkerHandle::stub(),
             should_quit: false,
@@ -493,5 +569,38 @@ mod tests {
             .expect("exit command should succeed");
 
         assert!(app.should_quit);
+    }
+
+    #[tokio::test]
+    async fn slash_completion_applies_selected_command() {
+        let mut app = test_app();
+        app.input.replace("/e");
+
+        assert!(app.try_apply_slash_suggestion());
+        assert_eq!(app.input.text(), "/exit");
+    }
+
+    #[tokio::test]
+    async fn tool_call_breaks_assistant_stream_into_new_segment() {
+        let mut app = test_app();
+        app.handle_worker_event(WorkerEvent::TextDelta("before".to_string()));
+        app.handle_worker_event(WorkerEvent::ToolCall {
+            summary: "Ran date".to_string(),
+            detail: Some("{\n  \"command\": \"date\"\n}".to_string()),
+        });
+        app.handle_worker_event(WorkerEvent::TextDelta("after".to_string()));
+
+        assert_eq!(
+            app.transcript,
+            vec![
+                TranscriptItem::new(TranscriptItemKind::Assistant, "Assistant", "before"),
+                TranscriptItem::new(
+                    TranscriptItemKind::ToolCall,
+                    "Ran date",
+                    "{\n  \"command\": \"date\"\n}"
+                ),
+                TranscriptItem::new(TranscriptItemKind::Assistant, "Assistant", "after"),
+            ]
+        );
     }
 }

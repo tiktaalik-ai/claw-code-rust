@@ -4,6 +4,7 @@ mod app;
 mod events;
 mod input;
 mod render;
+mod slash;
 mod terminal;
 mod worker;
 
