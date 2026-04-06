@@ -1,9 +1,10 @@
+pub mod legacy_permissions;
+
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use clawcr_core::PolicyModelSelection;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -243,6 +244,18 @@ pub enum SafetyPolicyMode {
     StaticPolicy,
     /// Use a model-guided classifier in addition to deterministic policy.
     ModelGuidedPolicy,
+}
+
+/// Selects the model used for model-guided safety policy evaluation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PolicyModelSelection {
+    /// Use the active turn model for policy classification.
+    UseTurnModel,
+    /// Use a separately configured model slug for policy classification.
+    UseConfiguredModel {
+        /// The configured model slug used for policy classification.
+        model_slug: String,
+    },
 }
 
 /// Enumerates the kind of resource being accessed by a permission request.
@@ -693,15 +706,15 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::PathBuf;
 
-    use clawcr_core::PolicyModelSelection;
     use regex::Regex;
 
     use super::{
         ApprovalCache, DefaultSandboxPolicyTransformer, EffectiveSandboxPolicy,
         FileSystemPolicyRecord, InMemorySecretDetectorRegistry, NetworkPolicy, PermissionDecision,
-        PermissionProfile, PermissionRequest, PolicySnapshot, RegexSecretDetector, ResourceKind,
-        SafetyPolicyMode, SandboxMode, SandboxPolicyRecord, SecretDetectorRegistry,
-        SecretMatchConfidence, SecretRedactor, StaticPermissionPolicy, REDACTED_SECRET_PLACEHOLDER,
+        PermissionProfile, PermissionRequest, PolicyModelSelection, PolicySnapshot,
+        RegexSecretDetector, ResourceKind, SafetyPolicyMode, SandboxMode,
+        SandboxPolicyRecord, SecretDetectorRegistry, SecretMatchConfidence, SecretRedactor,
+        StaticPermissionPolicy, REDACTED_SECRET_PLACEHOLDER,
     };
     use crate::{PermissionPolicy, SandboxPolicyTransformer};
 

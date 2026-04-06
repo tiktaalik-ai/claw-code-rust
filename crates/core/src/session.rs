@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clawcr_permissions::PermissionMode;
+use clawcr_safety::legacy_permissions::PermissionMode;
 
 use crate::{Message, TokenBudget};
 

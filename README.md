@@ -156,7 +156,7 @@ This project aims to:
 | `clawcr-core` | Message model, state container, main loop, session | `query.ts`, `QueryEngine.ts`, `state/store.ts` |
 | `clawcr-tools` | Tool trait, registry, execution orchestration, and built-in tools | `Tool.ts`, `tools.ts`, tool service layer |
 | `clawcr-tasks` | Long task lifecycle and notification mechanism | `Task.ts`, `tasks.ts` |
-| `clawcr-permissions` | Tool call authorization and rule matching | `types/permissions.ts`, `utils/permissions/` |
+| `clawcr-safety` | Secret redaction, approval policy, sandbox policy, and legacy runtime permission compatibility | `types/permissions.ts`, `utils/permissions/` |
 | `clawcr-provider` | Unified model interface, streaming, retry | `services/api/` |
 | `clawcr-core::context` | Context management, compaction, and token budget control | `services/compact/`, `query/tokenBudget.ts` |
 | `clawcr-mcp` | MCP client, connection, discovery, reconnect | `services/mcp/` |
@@ -183,7 +183,7 @@ Separating tool calls from runtime tasks is critical for supporting long command
 </details>
 
 <details>
-<summary><b>clawcr-permissions</b> — Authorization layer</summary>
+<summary><b>clawcr-safety</b> — Safety and authorization layer</summary>
 
 Controls what the agent can do, when it must ask the user, and when to refuse outright. Essential whenever agents read files, write files, or execute commands.
 </details>

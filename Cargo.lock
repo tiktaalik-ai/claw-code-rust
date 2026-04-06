@@ -290,8 +290,8 @@ dependencies = [
  "async-trait",
  "clap",
  "clawcr-core",
- "clawcr-permissions",
  "clawcr-provider",
+ "clawcr-safety",
  "clawcr-tasks",
  "clawcr-tools",
  "dirs",
@@ -310,8 +310,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "clawcr-permissions",
  "clawcr-provider",
+ "clawcr-safety",
  "clawcr-tools",
  "futures",
  "serde",
@@ -340,18 +340,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clawcr-permissions"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "clawcr-provider"
 version = "0.1.0"
 dependencies = [
@@ -374,7 +362,6 @@ name = "clawcr-safety"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "clawcr-core",
  "regex",
  "serde",
  "serde_json",
@@ -417,8 +404,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "clawcr-permissions",
  "clawcr-provider",
+ "clawcr-safety",
  "futures",
  "glob",
  "regex",

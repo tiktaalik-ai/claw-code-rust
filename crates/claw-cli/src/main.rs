@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use clawcr_core::{query, Message, QueryEvent, SessionConfig, SessionState};
-use clawcr_permissions::PermissionMode;
+use clawcr_safety::legacy_permissions::PermissionMode;
 use clawcr_tools::{ToolOrchestrator, ToolRegistry};
 
 mod config;

@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use clawcr_permissions::PermissionMode;
+use clawcr_safety::legacy_permissions::PermissionMode;
 use clawcr_provider::{StopReason, Usage};
 use clawcr_tools::{ToolOrchestrator, ToolOutput, ToolRegistry};
 

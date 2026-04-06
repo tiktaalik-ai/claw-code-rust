@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 clawcr-tools = { workspace = true }
 clawcr-provider = { workspace = true }
-clawcr-permissions = { workspace = true }
+clawcr-safety = { workspace = true }
 
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
@@ -33,4 +33,4 @@ anyhow = { workspace = true }
 uuid = { workspace = true }
 clawcr-provider = { workspace = true }
 clawcr-tools = { workspace = true }
-clawcr-permissions = { workspace = true }
+clawcr-safety = { workspace = true }

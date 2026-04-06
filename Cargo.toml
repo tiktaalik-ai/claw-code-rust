@@ -4,7 +4,6 @@ members = [
     "crates/core",
     "crates/tools",
     "crates/provider",
-    "crates/permissions",
     "crates/safety",
     "crates/tasks",
     "crates/mcp",
@@ -23,7 +22,6 @@ rust-version = "1.75"
 clawcr-core = { path = "crates/core" }
 clawcr-tools = { path = "crates/tools" }
 clawcr-provider = { path = "crates/provider" }
-clawcr-permissions = { path = "crates/permissions" }
 clawcr-safety = { path = "crates/safety" }
 clawcr-tasks = { path = "crates/tasks" }
 clawcr-mcp = { path = "crates/mcp" }

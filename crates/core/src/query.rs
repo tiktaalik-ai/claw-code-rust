@@ -349,7 +349,7 @@ pub async fn query(
         // Execute tool calls
         let tool_ctx = ToolContext {
             cwd: session.cwd.clone(),
-            permissions: Arc::new(clawcr_permissions::RuleBasedPolicy::new(
+            permissions: Arc::new(clawcr_safety::legacy_permissions::RuleBasedPolicy::new(
                 session.config.permission_mode,
             )),
             session_id: session.id.clone(),
@@ -394,7 +394,7 @@ mod tests {
     use futures::Stream;
     use serde_json::json;
 
-    use clawcr_permissions::PermissionMode;
+    use clawcr_safety::legacy_permissions::PermissionMode;
     use clawcr_provider::{
         ModelRequest, ModelResponse, ResponseContent, StopReason, StreamEvent, Usage,
     };
