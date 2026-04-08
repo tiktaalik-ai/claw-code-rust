@@ -185,6 +185,8 @@ async fn run_worker_inner(
     command_rx: &mut mpsc::UnboundedReceiver<WorkerCommand>,
     event_tx: &mpsc::UnboundedSender<WorkerEvent>,
 ) -> Result<()> {
+    // The worker owns the server client and translates UI commands into server
+    // calls, then turns server notifications back into lightweight UI events.
     let mut server_env = config.server_env;
     let mut client = spawn_client(&config.cwd, server_env.clone()).await?;
     let _ = client.initialize().await?;
@@ -231,11 +233,13 @@ async fn run_worker_inner(
                     Some(WorkerCommand::SetModel(next_model)) => {
                         model = next_model;
                     }
-                    Some(WorkerCommand::ReconfigureProvider {
-                        model: next_model,
-                        base_url,
-                        api_key,
-                    }) => {
+                Some(WorkerCommand::ReconfigureProvider {
+                    model: next_model,
+                    base_url,
+                    api_key,
+                }) => {
+                        // Recreate the client so new provider credentials take effect
+                        // without requiring the whole app to restart.
                         model = next_model;
                         apply_env_override(&mut server_env, "CLAWCR_MODEL", &model);
                         apply_optional_env_override(&mut server_env, "CLAWCR_BASE_URL", base_url);
@@ -391,6 +395,8 @@ async fn run_worker_inner(
                             }
                             "item/completed" => {
                                 if let ServerEvent::ItemCompleted(payload) = event {
+                                    // Completed tool items are mapped into compact UI events
+                                    // with pre-rendered summaries and previews.
                                     handle_completed_item(payload, event_tx);
                                 }
                             }
@@ -490,6 +496,9 @@ fn apply_optional_env_override(env: &mut Vec<(String, String)>, key: &str, value
 }
 
 fn handle_completed_item(payload: ItemEventPayload, event_tx: &mpsc::UnboundedSender<WorkerEvent>) {
+    // Only tool lifecycle items need special handling here; other item kinds are
+    // intentionally ignored because they are either streamed separately or not
+    // shown in the TUI transcript.
     match payload.item {
         ItemEnvelope {
             item_kind: ItemKind::ToolCall,

@@ -15,6 +15,8 @@ use crate::{
 
 /// Draws the full interactive UI for the current application state.
 pub(crate) fn draw(frame: &mut Frame, app: &TuiApp) {
+    // The layout is intentionally simple: transcript first, composer second,
+    // footer last. This keeps the visual hierarchy stable across redraws.
     let content_area = centered_content_area(frame.area());
     let composer_height = composer_height(app, content_area);
     let transcript_height = transcript_height(app, content_area);
@@ -82,11 +84,47 @@ fn render_transcript(app: &TuiApp, area: Rect) -> Paragraph<'static> {
 fn render_composer(app: &TuiApp, inner_width: u16) -> Paragraph<'_> {
     let mut lines = Vec::new();
     if let Some(prompt) = app.onboarding_prompt.as_deref() {
-        lines.push(Line::from(vec![Span::styled(
-            format!("{prompt}>"),
-            Style::new().cyan().add_modifier(Modifier::BOLD),
-        )]));
-        lines.push(Line::from(""));
+        let prompt_label = format!("{prompt}> ");
+        let rendered_input = app.input.rendered_lines_with_prompt(inner_width, Some(prompt));
+        if rendered_input.is_empty() {
+            lines.push(Line::from(vec![Span::styled(
+                prompt_label,
+                Style::new().cyan().add_modifier(Modifier::BOLD),
+            )]));
+        } else {
+            for (index, line) in rendered_input.into_iter().enumerate() {
+                if index == 0 {
+                    if let Some(rest) = line.strip_prefix(&prompt_label) {
+                        lines.push(Line::from(vec![
+                            Span::styled(
+                                prompt_label.clone(),
+                                Style::new().cyan().add_modifier(Modifier::BOLD),
+                            ),
+                            Span::raw(rest.to_string()),
+                        ]));
+                    } else {
+                        lines.push(Line::from(vec![Span::styled(
+                            line,
+                            Style::new().cyan().add_modifier(Modifier::BOLD),
+                        )]));
+                    }
+                } else {
+                    lines.push(Line::from(line));
+                }
+            }
+        }
+        if let Some(panel) = &app.aux_panel {
+            lines.push(Line::from(""));
+            append_onboarding_panel_body(&mut lines, panel, app, inner_width);
+            lines.push(Line::from(""));
+        }
+        append_wrapped_composer_line(
+            &mut lines,
+            "press enter to choose, esc to leave",
+            inner_width,
+            Style::new().dark_gray(),
+        );
+        return Paragraph::new(Text::from(lines));
     }
 
     let rendered_input = app.input.rendered_lines(inner_width);
@@ -258,7 +296,6 @@ fn render_composer(app: &TuiApp, inner_width: u16) -> Paragraph<'_> {
                 }
             }
         }
-
         lines.push(Line::from(""));
         append_wrapped_composer_line(
             &mut lines,
@@ -271,6 +308,9 @@ fn render_composer(app: &TuiApp, inner_width: u16) -> Paragraph<'_> {
     Paragraph::new(Text::from(lines))
 }
 fn render_footer(app: &TuiApp) -> Paragraph<'static> {
+    if app.onboarding_prompt.is_some() {
+        return Paragraph::new(Line::from(""));
+    }
     let cwd_name = app
         .cwd
         .file_name()
@@ -288,6 +328,131 @@ fn render_footer(app: &TuiApp) -> Paragraph<'static> {
         Span::styled("   ", Style::new().dark_gray()),
         Span::styled(meta, Style::new().dark_gray()),
     ]))
+}
+
+fn append_onboarding_panel_body(
+    lines: &mut Vec<Line<'static>>,
+    panel: &crate::app::AuxPanel,
+    app: &TuiApp,
+    inner_width: u16,
+) {
+    append_wrapped_composer_line(
+        lines,
+        &format!("  {}", panel.title),
+        inner_width,
+        Style::new().dark_gray().add_modifier(Modifier::BOLD),
+    );
+
+    match &panel.content {
+        AuxPanelContent::Text(body) => {
+            for line in body.lines() {
+                append_wrapped_composer_line(
+                    lines,
+                    &format!("  {line}"),
+                    inner_width,
+                    Style::new().dark_gray(),
+                );
+            }
+        }
+        AuxPanelContent::SessionList(entries) => {
+            if entries.is_empty() {
+                append_wrapped_composer_line(
+                    lines,
+                    "  No saved sessions found.",
+                    inner_width,
+                    Style::new().dark_gray(),
+                );
+            }
+
+            for (index, entry) in entries.iter().enumerate() {
+                let selected = index == app.aux_panel_selection.min(entries.len().saturating_sub(1));
+                let marker = if entry.is_active { "*" } else { " " };
+                let style = if selected {
+                    Style::new().black().on_gray()
+                } else {
+                    Style::new().dark_gray()
+                };
+                let title_style = if selected {
+                    style.add_modifier(Modifier::BOLD)
+                } else {
+                    Style::new().dark_gray().add_modifier(Modifier::BOLD)
+                };
+
+                append_wrapped_composer_session_entry(
+                    lines,
+                    &format!(
+                        "  {} {marker} {}  [{}]  {}",
+                        if selected { ">" } else { "•" },
+                        entry.title,
+                        entry.session_id,
+                        entry.updated_at
+                    ),
+                    inner_width,
+                    style,
+                    title_style,
+                );
+            }
+        }
+        AuxPanelContent::ModelList(entries) => {
+            if entries.is_empty() {
+                append_wrapped_composer_line(
+                    lines,
+                    "  No models available.",
+                    inner_width,
+                    Style::new().dark_gray(),
+                );
+            }
+
+            for (index, entry) in entries.iter().enumerate() {
+                let selected = index == app.aux_panel_selection.min(entries.len().saturating_sub(1));
+                let marker = if entry.is_current { "*" } else { " " };
+                let label = if entry.is_custom_mode {
+                    "custom"
+                } else if entry.is_builtin {
+                    entry.provider.as_str()
+                } else {
+                    "current"
+                };
+                let style = if selected {
+                    Style::new().black().on_gray()
+                } else {
+                    Style::new().dark_gray()
+                };
+                let title_style = if selected {
+                    style.add_modifier(Modifier::BOLD)
+                } else {
+                    Style::new().dark_gray().add_modifier(Modifier::BOLD)
+                };
+
+                let description = entry
+                    .description
+                    .as_deref()
+                    .filter(|description| !description.trim().is_empty())
+                    .unwrap_or(label);
+                let row = if app.show_model_onboarding {
+                    format!(
+                        "  {marker} {}  [{}]  {}",
+                        entry.display_name, entry.slug, description
+                    )
+                } else {
+                    format!(
+                        "  {} {marker} {}  [{}]  {}",
+                        if selected { ">" } else { "•" },
+                        entry.display_name,
+                        entry.slug,
+                        description
+                    )
+                };
+                append_wrapped_composer_session_entry(
+                    lines,
+                    &row,
+                    inner_width,
+                    style,
+                    title_style,
+                );
+            }
+        }
+    }
 }
 
 fn transcript_text(app: &TuiApp, inner_width: u16) -> Text<'static> {
@@ -356,6 +521,8 @@ fn append_transcript_item(
     spinner_index: usize,
     inner_width: u16,
 ) {
+    // Different transcript kinds intentionally use different prefixes so the
+    // user can scan human, assistant, tool, and system output quickly.
     match item.kind {
         TranscriptItemKind::User => {
             append_plain_message(lines, item, "> ", "  ", inner_width);
@@ -431,6 +598,8 @@ fn append_transcript_body(
 fn rendered_transcript_body(item: &crate::events::TranscriptItem) -> String {
     match item.kind {
         TranscriptItemKind::ToolResult => match item.fold_stage {
+            // Tool output folds in stages so a large result remains available
+            // briefly before collapsing into a compact summary.
             0 => item.body.trim_end_matches('\n').to_string(),
             1 => fold_tool_output(&item.body, 6),
             _ => fold_tool_output(&item.body, 3),
@@ -619,10 +788,102 @@ fn append_wrapped_composer_session_entry(
 
 pub(crate) fn composer_height(app: &TuiApp, area: Rect) -> u16 {
     let inner_width = area.width.max(1);
-    let mut total = app.input.visual_line_count(inner_width);
     if app.onboarding_prompt.is_some() {
-        total = total.saturating_add(2);
+        let mut total = wrapped_line_count_with_prefix(
+            &format!(
+                "{}>",
+                app.onboarding_prompt.as_deref().unwrap_or_default()
+            ),
+            inner_width,
+            0,
+        );
+        total = total.saturating_add(app.input.visual_line_count(inner_width));
+
+        if let Some(panel) = &app.aux_panel {
+            total = total.saturating_add(2);
+            total = total.saturating_add(wrapped_line_count_with_prefix(
+                &format!("  {}", panel.title),
+                inner_width,
+                0,
+            ));
+            match &panel.content {
+                AuxPanelContent::Text(body) => {
+                    for line in body.lines() {
+                        total = total.saturating_add(wrapped_line_count_with_prefix(
+                            &format!("  {line}"),
+                            inner_width,
+                            0,
+                        ));
+                    }
+                }
+                AuxPanelContent::SessionList(entries) => {
+                    if entries.is_empty() {
+                        total = total.saturating_add(wrapped_line_count_with_prefix(
+                            "  No saved sessions found.",
+                            inner_width,
+                            0,
+                        ));
+                    }
+                    for (index, entry) in entries.iter().enumerate() {
+                        let selected =
+                            index == app.aux_panel_selection.min(entries.len().saturating_sub(1));
+                        let marker = if entry.is_active { "*" } else { " " };
+                        let rendered = format!(
+                            "  {} {marker} {}  [{}]  {}",
+                            if selected { ">" } else { "•" },
+                            entry.title,
+                            entry.session_id,
+                            entry.updated_at
+                        );
+                        total = total.saturating_add(wrapped_line_count_with_prefix(
+                            &rendered,
+                            inner_width,
+                            0,
+                        ));
+                    }
+                }
+                AuxPanelContent::ModelList(entries) => {
+                    if entries.is_empty() {
+                        total = total.saturating_add(wrapped_line_count_with_prefix(
+                            "  No models available.",
+                            inner_width,
+                            0,
+                        ));
+                    }
+                    for entry in entries.iter() {
+                        let marker = if entry.is_current { "*" } else { " " };
+                        let description = entry
+                            .description
+                            .as_deref()
+                            .filter(|description| !description.trim().is_empty())
+                            .unwrap_or(if entry.is_custom_mode {
+                                "custom model"
+                            } else {
+                                entry.provider.as_str()
+                            });
+                        let rendered = format!(
+                            "  {marker} {}  [{}]  {}",
+                            entry.display_name, entry.slug, description
+                        );
+                        total = total.saturating_add(wrapped_line_count_with_prefix(
+                            &rendered,
+                            inner_width,
+                            0,
+                        ));
+                    }
+                }
+            }
+            total = total.saturating_add(1);
+            total = total.saturating_add(wrapped_line_count_with_prefix(
+                "  press enter to choose, esc to leave",
+                inner_width,
+                0,
+            ));
+        }
+        return total.clamp(1, area.height.saturating_sub(1).max(1).min(16));
     }
+
+    let mut total = app.input.visual_line_count(inner_width);
 
     let suggestions = app.slash_suggestions();
     if !suggestions.is_empty() {
@@ -737,13 +998,14 @@ pub(crate) fn composer_height(app: &TuiApp, area: Rect) -> u16 {
 }
 
 fn composer_cursor(app: &TuiApp, area: Rect) -> (u16, u16) {
-    let (cursor_x, cursor_y) = app.input.visual_cursor(area.width);
-    let y_offset = u16::from(app.onboarding_prompt.is_some()) * 2;
+    let (cursor_x, cursor_y) = if app.onboarding_prompt.is_some() {
+        app.input
+            .visual_cursor_with_prompt(area.width, app.onboarding_prompt.as_deref())
+    } else {
+        app.input.visual_cursor(area.width)
+    };
     (
         area.x + cursor_x,
-        area.y
-            + cursor_y
-                .saturating_add(y_offset)
-                .min(area.height.saturating_sub(1)),
+        area.y + cursor_y.min(area.height.saturating_sub(1)),
     )
 }

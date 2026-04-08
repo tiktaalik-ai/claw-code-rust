@@ -142,6 +142,8 @@ pub struct InteractiveTuiConfig {
 impl TuiApp {
     /// Runs the full interactive UI until the user exits.
     pub(crate) async fn run(config: InteractiveTuiConfig) -> Result<AppExit> {
+        // Spawn the worker first so startup prompts can be submitted immediately
+        // after the terminal session is ready.
         let startup_prompt = config.startup_prompt.clone();
         let worker = QueryWorkerHandle::spawn(QueryWorkerConfig {
             model: config.model.clone(),
@@ -201,6 +203,8 @@ impl TuiApp {
         let mut needs_redraw = true;
 
         loop {
+            // Only repaint after a state change; this keeps the UI responsive and
+            // avoids unnecessary full-screen redraws.
             if needs_redraw {
                 terminal
                     .terminal_mut()
@@ -216,6 +220,8 @@ impl TuiApp {
                 maybe_event = event_stream.next() => {
                     match maybe_event {
                         Some(Ok(event)) => {
+                            // Any terminal input can affect composer state, scrolling,
+                            // or selection state, so accepted input invalidates the frame.
                             app.handle_terminal_event(event, terminal.area())?;
                             needs_redraw = true;
                         }
@@ -234,6 +240,7 @@ impl TuiApp {
                 maybe_event = app.worker.event_rx.recv() => {
                     match maybe_event {
                         Some(event) => {
+                            // Worker events are the source of transcript and session updates.
                             app.handle_worker_event(event);
                             needs_redraw = true;
                         }
@@ -244,6 +251,8 @@ impl TuiApp {
                     }
                 }
                 _ = tick.tick() => {
+                    // The tick drives spinner animation, delayed fold transitions,
+                    // and buffered paste flushes that are waiting on idle time.
                     let mut redraw = app.advance_transcript_folds(Instant::now());
                     if app.busy {
                         app.spinner_index = app.spinner_index.wrapping_add(1);
@@ -284,6 +293,8 @@ impl TuiApp {
     fn handle_terminal_event(&mut self, event: Event, terminal_area: Rect) -> Result<()> {
         match event {
             Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+                // Flush buffered paste text before any navigation or command key so
+                // mixed keyboard and paste input stays in the expected order.
                 if !matches!(key.code, KeyCode::Char(_) | KeyCode::Enter) {
                     self.flush_pending_paste_burst(true);
                 }
@@ -348,6 +359,8 @@ impl TuiApp {
                 self.input.insert_char('\n');
             }
             KeyCode::Enter if !self.busy => {
+                // Enter has three roles depending on current state:
+                // accept a pasted multiline burst, execute a slash command, or submit.
                 if self.paste_burst.push_newline(Instant::now()) {
                     return;
                 }
@@ -477,6 +490,8 @@ impl TuiApp {
         let Some(text) = self.paste_burst.take_if_due(Instant::now(), force) else {
             return false;
         };
+        // Insert the paste as one batch so a terminal paste behaves like a single
+        // editing action instead of a sequence of character events.
         self.input.insert_str(&text);
         self.reset_slash_selection();
         self.aux_panel = None;
@@ -488,6 +503,8 @@ impl TuiApp {
         const EXIT_CONFIRM_WINDOW: Duration = Duration::from_secs(2);
 
         let now = Instant::now();
+        // The first Ctrl+C interrupts a running turn or arms exit confirmation.
+        // A second press within the window exits the app.
         if self
             .last_ctrl_c_at
             .is_some_and(|previous| now.duration_since(previous) <= EXIT_CONFIRM_WINDOW)
@@ -516,6 +533,7 @@ impl TuiApp {
     }
 
     fn handle_submission(&mut self, prompt: String) -> Result<()> {
+        // Onboarding states consume input locally; only normal prompts reach the worker.
         if self.onboarding_custom_model_pending {
             let model = prompt.trim();
             if model.is_empty() {
@@ -628,6 +646,7 @@ impl TuiApp {
     }
 
     fn show_model_panel(&mut self) {
+        // The same picker is reused for normal model switching and onboarding.
         let entries = self.model_picker_entries();
         self.aux_panel_selection = entries
             .iter()
@@ -716,6 +735,8 @@ impl TuiApp {
         let command = parts.next().unwrap_or_default();
         let argument = parts.next().map(str::trim).unwrap_or_default();
 
+        // Slash commands update local UI immediately, and only call the worker when
+        // the command needs server-side state to change.
         match command {
             "/exit" => {
                 self.push_item(
@@ -829,6 +850,8 @@ impl TuiApp {
     }
 
     fn handle_worker_event(&mut self, event: WorkerEvent) {
+        // Worker events are intentionally reduced to UI state transitions here so the
+        // rendering layer stays a pure projection of application state.
         match event {
             WorkerEvent::TurnStarted => {
                 self.busy = true;
@@ -1028,6 +1051,8 @@ impl TuiApp {
     }
 
     fn advance_transcript_folds(&mut self, now: Instant) -> bool {
+        // Tool results compact over time so long outputs briefly stay readable before
+        // collapsing to a smaller transcript footprint.
         let mut changed = false;
         for item in &mut self.transcript {
             if item.advance_fold(now) {
@@ -1093,7 +1118,7 @@ impl TuiApp {
             return;
         }
         let len = suggestions.len() as isize;
-        let next = (self.slash_selection as isize + delta).clamp(0, len - 1);
+        let next = (self.slash_selection as isize + delta).rem_euclid(len);
         self.slash_selection = next as usize;
     }
 
@@ -1124,7 +1149,7 @@ impl TuiApp {
         }
 
         let len = len as isize;
-        let next = (self.aux_panel_selection as isize + delta).clamp(0, len - 1);
+        let next = (self.aux_panel_selection as isize + delta).rem_euclid(len);
         self.aux_panel_selection = next as usize;
     }
 
@@ -1136,6 +1161,8 @@ impl TuiApp {
             return false;
         }
 
+        // Session and model pickers are only actionable when the composer is empty,
+        // which prevents accidental selection while the user is typing a prompt.
         match &panel.content {
             AuxPanelContent::SessionList(sessions) => {
                 if sessions.is_empty() {
@@ -1198,6 +1225,8 @@ impl TuiApp {
         let base_url = self.onboarding_selected_base_url.take();
         let api_key = self.onboarding_selected_api_key.take();
 
+        // Persist the choice first, then reconfigure the worker so the live session
+        // immediately reflects the onboarding selection.
         save_onboarding_config(
             self.provider,
             &model,
@@ -1704,6 +1733,24 @@ mod tests {
 
         app.move_aux_panel_selection(-1);
         assert_eq!(app.aux_panel_selection, 0);
+
+        app.move_aux_panel_selection(-1);
+        assert_eq!(app.aux_panel_selection, 1);
+
+        app.move_aux_panel_selection(1);
+        assert_eq!(app.aux_panel_selection, 0);
+    }
+
+    #[tokio::test]
+    async fn slash_selection_wraps_around() {
+        let mut app = test_app();
+        app.input.replace("/");
+
+        app.move_slash_selection(-1);
+        assert_eq!(app.slash_selection, app.slash_suggestions().len() - 1);
+
+        app.move_slash_selection(1);
+        assert_eq!(app.slash_selection, 0);
     }
 
     #[tokio::test]
