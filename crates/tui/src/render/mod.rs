@@ -383,7 +383,9 @@ fn render_aux_panel_overlay(
             let items = thinking_items(entries);
             let mut state = ListState::default();
             if !entries.is_empty() {
-                state.select(Some(app.aux_panel_selection.min(entries.len().saturating_sub(1))));
+                state.select(Some(
+                    app.aux_panel_selection.min(entries.len().saturating_sub(1)),
+                ));
             }
             let overlay_area = if app.onboarding_prompt.is_some() {
                 centered_popup_area(
@@ -449,7 +451,9 @@ fn render_inline_aux_panel(frame: &mut Frame, area: Rect, app: &TuiApp, panel: I
             let items = session_items(entries);
             let mut state = ListState::default();
             if !entries.is_empty() {
-                state.select(Some(app.aux_panel_selection.min(entries.len().saturating_sub(1))));
+                state.select(Some(
+                    app.aux_panel_selection.min(entries.len().saturating_sub(1)),
+                ));
             }
             let list = List::new(items)
                 .block(overlay_block(&panel.title, false))
@@ -461,7 +465,9 @@ fn render_inline_aux_panel(frame: &mut Frame, area: Rect, app: &TuiApp, panel: I
             let items = thinking_items(entries);
             let mut state = ListState::default();
             if !entries.is_empty() {
-                state.select(Some(app.aux_panel_selection.min(entries.len().saturating_sub(1))));
+                state.select(Some(
+                    app.aux_panel_selection.min(entries.len().saturating_sub(1)),
+                ));
             }
             let list = List::new(items)
                 .block(overlay_block(&panel.title, false))
@@ -473,7 +479,9 @@ fn render_inline_aux_panel(frame: &mut Frame, area: Rect, app: &TuiApp, panel: I
             let items = model_items(app, entries);
             let mut state = ListState::default();
             if !entries.is_empty() {
-                state.select(Some(app.aux_panel_selection.min(entries.len().saturating_sub(1))));
+                state.select(Some(
+                    app.aux_panel_selection.min(entries.len().saturating_sub(1)),
+                ));
             }
             let list = List::new(items)
                 .highlight_style(theme::selected().add_modifier(Modifier::BOLD))
@@ -692,14 +700,20 @@ fn thinking_items(entries: &[ThinkingListEntry]) -> Vec<ListItem<'static>> {
                     Span::styled("  ", theme::muted()),
                     Span::styled(format!("[{}]", entry.value), theme::muted()),
                 ]),
-                Line::from(vec![Span::styled(entry.description.clone(), theme::muted())]),
+                Line::from(vec![Span::styled(
+                    entry.description.clone(),
+                    theme::muted(),
+                )]),
             ])
         })
         .collect()
 }
 
 fn text_panel_height(body: &str) -> u16 {
-    body.lines().count().saturating_add(2).clamp(4, MAX_TEXT_OVERLAY_HEIGHT as usize) as u16
+    body.lines()
+        .count()
+        .saturating_add(2)
+        .clamp(4, MAX_TEXT_OVERLAY_HEIGHT as usize) as u16
 }
 
 fn session_panel_height(entries: &[crate::events::SessionListEntry]) -> u16 {

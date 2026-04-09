@@ -613,9 +613,7 @@ impl ServerRuntime {
                     .get(&model)
                     .map(|model| match model.effective_thinking_capability() {
                         clawcr_core::ThinkingCapability::Disabled => None,
-                        clawcr_core::ThinkingCapability::Toggle => {
-                            Some(String::from("enabled"))
-                        }
+                        clawcr_core::ThinkingCapability::Toggle => Some(String::from("enabled")),
                         clawcr_core::ThinkingCapability::Levels(_) => {
                             Some(model.default_reasoning_level.label().to_lowercase())
                         }
@@ -627,7 +625,8 @@ impl ServerRuntime {
                 core_session.config.thinking_selection = thinking_selection;
             }
             if let Some(thinking_selection) = params.thinking.clone() {
-                session.core_session.lock().await.config.thinking_selection = Some(thinking_selection);
+                session.core_session.lock().await.config.thinking_selection =
+                    Some(thinking_selection);
             }
             let turn = TurnSummary {
                 turn_id: TurnId::new(),

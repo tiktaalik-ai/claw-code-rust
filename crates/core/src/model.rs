@@ -87,10 +87,7 @@ impl ReasoningLevel {
     pub fn options() -> Vec<ReasoningLevelOption> {
         vec![
             ReasoningLevelOption::new(ReasoningLevel::Low, ReasoningLevel::Low.description()),
-            ReasoningLevelOption::new(
-                ReasoningLevel::Medium,
-                ReasoningLevel::Medium.description(),
-            ),
+            ReasoningLevelOption::new(ReasoningLevel::Medium, ReasoningLevel::Medium.description()),
             ReasoningLevelOption::new(ReasoningLevel::High, ReasoningLevel::High.description()),
             ReasoningLevelOption::new(ReasoningLevel::XHigh, ReasoningLevel::XHigh.description()),
         ]
@@ -298,11 +295,17 @@ impl ModelConfig {
         let mut options = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
-        let push_level = |level: &ReasoningLevel, options: &mut Vec<ReasoningLevelOption>, seen: &mut std::collections::HashSet<ReasoningLevel>| {
-            if seen.insert(level.clone()) {
-                options.push(ReasoningLevelOption::new(level.clone(), level.description()));
-            }
-        };
+        let push_level =
+            |level: &ReasoningLevel,
+             options: &mut Vec<ReasoningLevelOption>,
+             seen: &mut std::collections::HashSet<ReasoningLevel>| {
+                if seen.insert(level.clone()) {
+                    options.push(ReasoningLevelOption::new(
+                        level.clone(),
+                        level.description(),
+                    ));
+                }
+            };
 
         push_level(&self.default_reasoning_level, &mut options, &mut seen);
         for level in &self.supported_reasoning_levels {
@@ -313,9 +316,9 @@ impl ModelConfig {
 
     /// Returns the thinking capability for this model, deriving a default when needed.
     pub fn effective_thinking_capability(&self) -> ThinkingCapability {
-        self.thinking_capability.clone().unwrap_or_else(|| {
-            ThinkingCapability::Levels(self.supported_reasoning_levels.clone())
-        })
+        self.thinking_capability
+            .clone()
+            .unwrap_or_else(|| ThinkingCapability::Levels(self.supported_reasoning_levels.clone()))
     }
 }
 

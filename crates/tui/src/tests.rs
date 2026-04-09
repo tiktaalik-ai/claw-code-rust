@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use clawcr_core::{
-    BuiltinModelCatalog, ModelConfig, ModelVisibility, ProviderKind, ReasoningLevel,
-    SessionId, ThinkingCapability,
+    BuiltinModelCatalog, ModelConfig, ModelVisibility, ProviderKind, ReasoningLevel, SessionId,
+    ThinkingCapability,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pretty_assertions::assert_eq;
